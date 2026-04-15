@@ -21,7 +21,8 @@ COLORS = [
     "#534AB7", "#3B6D11", "#993C1D", "#185FA5",
 ]
 
-SHEET_ID = "1tyJYRWVPl7F5kprBylR_WbbIVayIWQEUxdQ-2sCL-cM"
+PRODUCTS_SHEET_ID = "1tyJYRWVPl7F5kprBylR_WbbIVayIWQEUxdQ-2sCL-cM"
+ORDERS_SHEET_ID = "13HB7e9mzL0H6Nhfyl-AKhjO8M_GElnqPldTk-u-0ni8"
 ORDERS_SHEET = "訂單明細"
 PRODUCTS_SHEET = "產品清單"
 product_cache = {}
@@ -32,7 +33,7 @@ def load_products():
     if time.time() - cache_time < 3600 and product_cache:
         return product_cache
     try:
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(PRODUCTS_SHEET)}"
+        url = f"https://docs.google.com/spreadsheets/d/{PRODUCTS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(PRODUCTS_SHEET)}"
         response = urlopen(url)
         lines = response.read().decode("utf-8").splitlines()
         reader = csv.reader(lines)
@@ -59,7 +60,7 @@ def load_products():
 
 def load_order_items(order_id):
     try:
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(ORDERS_SHEET)}"
+       url = f"https://docs.google.com/spreadsheets/d/{ORDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(ORDERS_SHEET)}"
         response = urlopen(url)
         lines = response.read().decode("utf-8").splitlines()
         reader = csv.reader(lines)
