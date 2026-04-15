@@ -60,7 +60,7 @@ def load_products():
 
 def load_order_items(order_id):
     try:
-       url = f"https://docs.google.com/spreadsheets/d/{ORDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(ORDERS_SHEET)}"
+        url = f"https://docs.google.com/spreadsheets/d/{ORDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(ORDERS_SHEET)}"
         response = urlopen(url)
         lines = response.read().decode("utf-8").splitlines()
         reader = csv.reader(lines)
