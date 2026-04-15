@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>裝箱結果</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f4f0;color:#222;padding:16px}
+h1{font-size:18px;font-weight:600;margin-bottom:4px}
+.sub{font-size:13px;color:#888;margin-bottom:16px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stat{background:#fff;border-radius:10px;padding:12px;text-align:center;border:0.5px solid #e0ded8}
+.stat-n{font-size:20px;font-weight:600;color:#222}
+.stat-l{font-size:11px;color:#888;margin-top:3px}
+.badge{display:inline-block;font-size:12px;padding:3px 10px;border-radius:6px;font-weight:500;margin-bottom:16px}
+.badge-ok{background:#d4f0e4;color:#0a5c38}
+.badge-warn{background:#fdebd0;color:#7a4400}
+.card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;border:0.5px solid #e0ded8}
+.card-title{font-size:13px;font-weight:600;margin-bottom:10px;color:#444}
+.view-btns{display:flex;gap:8px;margin-bottom:10px}
+.vbtn{flex:1;padding:7px 0;font-size:12px;border:0.5px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;color:#333}
+.vbtn.active{background:#222;color:#fff;border-color:#222}
+canvas{width:100%;border-radius:8px;border:0.5px solid #e0ded8;background:#fafaf8;display:block;touch-action:none}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:12px;color:#555}
+.leg-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+.layer-section{margin-bottom:10px}
+.layer-label{font-size:11px;color:#888;margin-bottom:5px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:12px;padding:4px 10px;border-radius:6px;border:0.5px solid #ddd;color:#333;background:#fafaf8;border-left-width:3px}
+.tip{font-size:12px;color:#888;text-align:center;margin-top:8px}
+table{width:100%;font-size:13px;border-collapse:collapse}
+td{padding:7px 4px;border-bottom:0.5px solid #f0eeea;color:#444;vertical-align:middle}
+td:first-child{color:#222;font-weight:500}
+td:last-child{text-align:right}
+.dot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+#hover-info{font-size:12px;color:#888;text-align:center;height:18px;margin-top:6px}
+</style>
+</head>
+<body>
+
+{% set r = session.result %}
+{% set box = session.box %}
+{% set bdims = session.box_dims %}
+
+<h1>裝箱結果</h1>
+<div class="sub">出貨單 {{ session.order_id or '—' }}</div>
+
+<span class="badge {% if r.success %}badge-ok{% else %}badge-warn{% endif %}">
+  {% if r.success %}可以裝進去{% else %}部分放不下，建議拆單{% endif %}
+</span>
+
+<div class="stats">
+  <div class="stat"><div class="stat-n">{{ box }}</div><div class="stat-l">建議箱型</div></div>
+  <div class="stat"><div class="stat-n">{{ r.layers }} 層</div><div class="stat-l">排列層數</div></div>
+  <div class="stat"><div class="stat-n">{{ r.utilization }}%</div><div class="stat-l">空間使用率</div></div>
+</div>
+
+<!-- 3D 視覺化 -->
+<div class="card">
+  <div class="card-title">3D 裝箱圖</div>
+  <div class="view-btns">
+    <button class="vbtn active" onclick="setView('iso')">斜視</button>
+    <button class="vbtn" onclick="setView('front')">正面</button>
+    <button class="vbtn" onclick="setView('top')">俯視</button>
+    <button class="vbtn" onclick="setView('side')">側面</button>
+  </div>
+  <canvas id="c3d" height="300"></canvas>
+  <div id="hover-info">滑動可旋轉・點產品查看資訊</div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<!-- 層排列文字版 -->
+<div class="card">
+  <div class="card-title">層排列（打包時對照用）</div>
+  <div id="layers-text"></div>
+</div>
+
+<!-- 產品方向表 -->
+<div class="card">
+  <div class="card-title">各產品擺放方式</div>
+  <table>
+    <thead>
+      <tr>
+        <td style="color:#888;font-weight:400">產品</td>
+        <td style="color:#888;font-weight:400;text-align:center">方向</td>
+        <td style="color:#888;font-weight:400;text-align:center">層</td>
+        <td style="color:#888;font-weight:400;text-align:right">尺寸(cm)</td>
+      </tr>
+    </thead>
+    <tbody id="prod-table"></tbody>
+  </table>
+</div>
+
+<div class="tip">箱子內徑：{{ bdims.w }}×{{ bdims.h }}×{{ bdims.d }} cm</div>
+
+<script>
+const packed = {{ r.packed | tojson }};
+const BOX = {{ session.box_dims | tojson }};
+const items = {{ session.items | tojson }};
+
+// ── 3D 渲染 ──
+const canvas = document.getElementById('c3d');
+const ctx = canvas.getContext('2d');
+let W, H, CX, CY;
+function resize(){
+  W = canvas.offsetWidth; H = 300;
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  draw();
+}
+
+let rotX = 0.38, rotY = -0.55;
+let dragging = false, lastX, lastY, hovIdx = -1;
+
+function proj(x, y, z){
+  const cx = Math.cos(rotX), sx = Math.sin(rotX);
+  const cy = Math.cos(rotY), sy = Math.sin(rotY);
+  const x1 = x*cy + z*sy;
+  const y1 = -x*sy*sx + y*cx - z*cy*sx;
+  const sc = Math.min(W, H) / Math.max(BOX.w, BOX.h, BOX.d) * 0.55;
+  return [CX + x1*sc, CY - y1*sc - H*0.07];
+}
+
+function face(pts, fill, stroke){
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.strokeStyle = stroke; ctx.lineWidth = 0.6; ctx.stroke();
+}
+
+function lighten(c, a){ return c + Math.round(a).toString(16).padStart(2,'0'); }
+
+function drawCuboid(it, hov){
+  const {x, y, z, w, h, d, color} = it;
+  const bx = BOX.w/2, by = BOX.h/2, bz = BOX.d/2;
+  const p = (dx,dy,dz) => proj(x+dx-bx, -(y+dy)+by, z+dz-bz);
+  const tl=p(0,h,0),tr=p(w,h,0),br=p(w,0,0),bl=p(0,0,0);
+  const tl2=p(0,h,d),tr2=p(w,h,d),br2=p(w,0,d),bl2=p(0,0,d);
+  const cy2=Math.cos(rotY), sy2=Math.sin(rotY), cx2=Math.cos(rotX);
+  const dim = hov ? 'ff' : 'cc';
+  const c = color + dim;
+  const dark = color + (hov?'bb':'88');
+  const light_top = hov ? color+'dd' : color+'aa';
+  if(cx2>=0) face([tl2,tr2,tr,tl], light_top, color+'44');
+  if(cy2>=0) face([bl,tl,tr,br], c, color+'55');
+  else        face([bl2,tl2,tl,bl], dark, color+'44');
+  if(sy2<=0) face([br,tr,tr2,br2], dark, color+'44');
+  else        face([bl2,tl2,tl,bl], dark, color+'44');
+  if(cy2<0)  face([bl,tl,tr,br], c, color+'55');
+  if(cx2<0)  face([tl2,tr2,tr,tl], light_top, color+'44');
+  if(sy2>0)  face([br,tr,tr2,br2], dark, color+'44');
+}
+
+function drawBoxWire(){
+  const bx=BOX.w/2, by=BOX.h/2, bz=BOX.d/2;
+  const corners=[
+    [0,0,0],[BOX.w,0,0],[BOX.w,BOX.h,0],[0,BOX.h,0],
+    [0,0,BOX.d],[BOX.w,0,BOX.d],[BOX.w,BOX.h,BOX.d],[0,BOX.h,BOX.d],
+  ].map(([x,y,z])=>proj(x-bx,-y+by,z-bz));
+  const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  ctx.strokeStyle='rgba(100,100,90,0.2)'; ctx.lineWidth=0.8; ctx.setLineDash([4,3]);
+  edges.forEach(([a,b])=>{ctx.beginPath();ctx.moveTo(corners[a][0],corners[a][1]);ctx.lineTo(corners[b][0],corners[b][1]);ctx.stroke();});
+  ctx.setLineDash([]);
+}
+
+function sortedPacked(){
+  return packed.map((it,i)=>({...it,i})).sort((a,b)=>{
+    const dep=(p)=>{
+      const cy=Math.cos(rotY),sy=Math.sin(rotY),sx=Math.sin(rotX);
+      return (p.x+p.w/2-BOX.w/2)*sy + (-(p.y+p.h/2)+BOX.h/2)*(-sx) + (p.z+p.d/2-BOX.d/2)*cy;
+    };
+    return dep(a)-dep(b);
+  });
+}
+
+function draw(){
+  CX = W/2; CY = H/2;
+  ctx.clearRect(0,0,W,H);
+  drawBoxWire();
+  sortedPacked().forEach(it=>drawCuboid(it, it.i===hovIdx));
+
+  if(hovIdx>=0){
+    const it=packed[hovIdx];
+    const cp=proj(it.x+it.w/2-BOX.w/2,-(it.y+it.h/2)+BOX.h/2,it.z+it.d/2-BOX.d/2);
+    const tx=Math.min(cp[0]+8, W-140), ty=Math.max(cp[1]-48,8);
+    ctx.fillStyle='rgba(255,255,255,0.93)';
+    ctx.strokeStyle=it.color; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(tx,ty,132,40,6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#222'; ctx.font='500 12px sans-serif';
+    ctx.fillText(it.name, tx+9, ty+15);
+    ctx.fillStyle='#777'; ctx.font='11px sans-serif';
+    ctx.fillText(`${it.orientation}・第${it.layer}層・${it.w}×${it.h}×${it.d}`, tx+9, ty+30);
+  }
+}
+
+function getHov(mx,my){
+  let best=-1, bestD=-Infinity;
+  packed.forEach((it,i)=>{
+    const corners=[[it.x,it.y,it.z],[it.x+it.w,it.y,it.z],[it.x+it.w,it.y+it.h,it.z],[it.x,it.y+it.h,it.z],
+      [it.x,it.y,it.z+it.d],[it.x+it.w,it.y,it.z+it.d],[it.x+it.w,it.y+it.h,it.z+it.d],[it.x,it.y+it.h,it.z+it.d]];
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    corners.forEach(([x,y,z])=>{
+      const [px,py]=proj(x-BOX.w/2,-y+BOX.h/2,z-BOX.d/2);
+      minX=Math.min(minX,px);maxX=Math.max(maxX,px);
+      minY=Math.min(minY,py);maxY=Math.max(maxY,py);
+    });
+    if(mx>=minX&&mx<=maxX&&my>=minY&&my<=maxY){
+      const d=it.x+it.y+it.z;
+      if(d>bestD){bestD=d;best=i;}
+    }
+  });
+  return best;
+}
+
+canvas.addEventListener('mousedown',e=>{dragging=true;lastX=e.offsetX;lastY=e.offsetY;});
+canvas.addEventListener('mousemove',e=>{
+  if(dragging){rotY+=(e.offsetX-lastX)*0.012;rotX+=(e.offsetY-lastY)*0.012;lastX=e.offsetX;lastY=e.offsetY;draw();}
+  else{const h=getHov(e.offsetX,e.offsetY);if(h!==hovIdx){hovIdx=h;draw();}
+    document.getElementById('hover-info').textContent=h>=0?`${packed[h].name}・${packed[h].orientation}・第${packed[h].layer}層`:'滑動可旋轉・點產品查看資訊';}
+});
+canvas.addEventListener('mouseup',()=>dragging=false);
+canvas.addEventListener('mouseleave',()=>{dragging=false;hovIdx=-1;draw();});
+
+let t1x,t1y;
+canvas.addEventListener('touchstart',e=>{const t=e.touches[0];t1x=t.clientX;t1y=t.clientY;dragging=true;},{passive:true});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const t=e.touches[0];
+  rotY+=(t.clientX-t1x)*0.012;rotX+=(t.clientY-t1y)*0.012;
+  t1x=t.clientX;t1y=t.clientY;draw();
+},{passive:false});
+canvas.addEventListener('touchend',()=>dragging=false);
+
+function setView(v){
+  document.querySelectorAll('.vbtn').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  if(v==='iso'){rotX=0.38;rotY=-0.55;}
+  else if(v==='front'){rotX=0;rotY=0;}
+  else if(v==='top'){rotX=1.4;rotY=0;}
+  else if(v==='side'){rotX=0;rotY=-1.57;}
+  draw();
+}
+
+// ── 圖例 ──
+const legendEl = document.getElementById('legend');
+const seen = new Set();
+packed.forEach(p=>{
+  if(!seen.has(p.name)){
+    seen.add(p.name);
+    const div=document.createElement('div'); div.className='leg-item';
+    div.innerHTML=`<span class="leg-dot" style="background:${p.color}"></span>${p.name}`;
+    legendEl.appendChild(div);
+  }
+});
+
+// ── 層排列文字版 ──
+const layersEl = document.getElementById('layers-text');
+const layerMap = {};
+packed.forEach(p=>{
+  if(!layerMap[p.layer]) layerMap[p.layer]=[];
+  layerMap[p.layer].push(p);
+});
+Object.entries(layerMap).sort((a,b)=>a[0]-b[0]).forEach(([ln, ps])=>{
+  const label = ln==1?'第1層（底部）': ln==Object.keys(layerMap).length?`第${ln}層（頂部）`:`第${ln}層（中間）`;
+  const div=document.createElement('div'); div.className='layer-section';
+  const chips = ps.map(p=>`<span class="chip" style="border-left-color:${p.color}">${p.name} ${p.orientation}</span>`).join('');
+  div.innerHTML=`<div class="layer-label">${label}</div><div class="chips">${chips}</div>`;
+  layersEl.appendChild(div);
+});
+
+// ── 產品方向表 ──
+const tbody = document.getElementById('prod-table');
+const prodMap = {};
+packed.forEach(p=>{
+  if(!prodMap[p.name]) prodMap[p.name]={name:p.name,color:p.color,orientations:new Set(),layers:new Set(),w:p.w,h:p.h,d:p.d};
+  prodMap[p.name].orientations.add(p.orientation);
+  prodMap[p.name].layers.add(p.layer);
+});
+Object.values(prodMap).forEach(p=>{
+  const tr=document.createElement('tr');
+  tr.innerHTML=`
+    <td><span class="dot" style="background:${p.color}"></span>${p.name}</td>
+    <td style="text-align:center">${[...p.orientations].join('/')}</td>
+    <td style="text-align:center">${[...p.layers].sort().join(', ')}</td>
+    <td>${p.w}×${p.h}×${p.d}</td>`;
+  tbody.appendChild(tr);
+});
+
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
