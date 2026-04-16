@@ -102,7 +102,7 @@ const canvas = document.getElementById('c3d');
 const ctx = canvas.getContext('2d');
 let W, H;
 
-let rotX = 0.42, rotY = -0.55;
+let rotX = 0.5, rotY = 0.6;
 let dragging = false, lastX, lastY, hovIdx = -1;
 
 function resize(){
@@ -116,14 +116,15 @@ function resize(){
 
 const SC = () => Math.min(W, H) / Math.max(BOX.w, BOX.h, BOX.d) * 0.48;
 const CX = () => W * 0.5;
-const CY = () => H * 0.62;
+const CY = () => H * 0.58;
 
 function proj(x, y, z){
-  const cx = Math.cos(rotX), sx = Math.sin(rotX);
-  const cy = Math.cos(rotY), sy = Math.sin(rotY);
-  const x1 = x * cy + z * sy;
-  const y1 = -x * sy * sx + y * cx - z * cy * sx;
-  const sc = SC();
+  var cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  var x1 = x * cosY - z * sinY;
+  var z1 = x * sinY + z * cosY;
+  var cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  var y1 = y * cosX - z1 * sinX;
+  var sc = SC();
   return [CX() + x1 * sc, CY() - y1 * sc];
 }
 
@@ -286,10 +287,10 @@ canvas.addEventListener('touchend',function(){dragging=false;});
 function setView(v,btn){
   document.querySelectorAll('.vbtn').forEach(function(b){b.classList.remove('active');});
   btn.classList.add('active');
-  if(v==='iso'){rotX=0.42;rotY=-0.55;}
-  else if(v==='front'){rotX=0.08;rotY=0;}
-  else if(v==='top'){rotX=1.45;rotY=0;}
-  else if(v==='side'){rotX=0.08;rotY=-1.57;}
+  if(v==='iso'){rotX=0.5;rotY=0.6;}
+  else if(v==='front'){rotX=0.1;rotY=0;}
+  else if(v==='top'){rotX=1.45;rotY=0.6;}
+  else if(v==='side'){rotX=0.1;rotY=1.57;}
   draw();
 }
 
