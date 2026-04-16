@@ -347,10 +347,10 @@ Object.values(prodMap).forEach(p=>{
   tr.innerHTML=`<td><span class="dot" style="background:${p.color}"></span>${p.name}</td>
     <td style="text-align:center">${[...p.orientations].join('/')}</td>
     <td style="text-align:center">${[...p.layers].sort((a,b)=>a-b).join(', ')}</td>
+    <td style="text-align:center;font-weight:600;color:#222">×${p.count}</td>
     <td>${p.w}×${p.h}×${p.d}</td>`;
   tbody.appendChild(tr);
 });
-
 window.addEventListener('resize',resize);
 resize();
 </script>
