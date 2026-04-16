@@ -83,6 +83,7 @@ td:last-child{text-align:right}
         <td style="color:#888;font-weight:400">產品</td>
         <td style="color:#888;font-weight:400;text-align:center">方向</td>
         <td style="color:#888;font-weight:400;text-align:center">層</td>
+        <td style="color:#888;font-weight:400;text-align:center">數量</td>
         <td style="color:#888;font-weight:400;text-align:right">尺寸(cm)</td>
       </tr>
     </thead>
@@ -336,11 +337,11 @@ Object.entries(layerMap).sort((a,b)=>Number(a[0])-Number(b[0])).forEach(([ln,ps]
 
 // 產品方向表
 const tbody=document.getElementById('prod-table');
-const prodMap={};
 packed.forEach(p=>{
-  if(!prodMap[p.name])prodMap[p.name]={name:p.name,color:p.color,orientations:new Set(),layers:new Set(),w:p.w,h:p.h,d:p.d};
+  if(!prodMap[p.name])prodMap[p.name]={name:p.name,color:p.color,orientations:new Set(),layers:new Set(),w:p.w,h:p.h,d:p.d,count:0};
   prodMap[p.name].orientations.add(p.orientation);
   prodMap[p.name].layers.add(p.layer);
+  prodMap[p.name].count++;
 });
 Object.values(prodMap).forEach(p=>{
   const tr=document.createElement('tr');
