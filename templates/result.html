@@ -98,7 +98,7 @@ td:last-child{text-align:right}
 <script>
 const packed = {{ r.packed | tojson }};
 const BOX = {{ session.box_dims | tojson }};
-const items = {{ session.items | tojson }};
+const items = {{ session.products | tojson }};
 
 // ── 3D 渲染 ──
 const canvas = document.getElementById('c3d');
