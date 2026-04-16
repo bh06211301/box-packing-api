@@ -248,6 +248,11 @@ def test_products():
         return jsonify({"count": len(products), "sample": sample})
     else:
         return jsonify({"count": 0, "error": "讀取失敗"})
+@app.route("/test-orders")
+def test_orders():
+    order_id = request.args.get("order_id", "")
+    items = load_order_items(order_id)
+    return jsonify({"order_id": order_id, "count": len(items), "items": items})
 @app.route("/")
 def index():
     return jsonify({"status": "ok", "message": "裝箱 API 運行中"})
