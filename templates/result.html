@@ -193,15 +193,18 @@ function drawCuboid(it, hov){
   const sideC=shade(color,-35);
   const strokeC=shade(color,-70);
   const lw=hov?1.5:0.7;
-  poly(back, shade(color,-15), strokeC, lw);
-  if(sy2>0){ poly(left2, sideC, strokeC, lw); }
-  else { poly(right, sideC, strokeC, lw); }
-  if(cy2>0){ poly(front, color, strokeC, lw); }
-  else { poly(back, shade(color,-15), strokeC, lw); }
-  if(cy2<=0){ poly(front, color, strokeC, lw); }
-  if(sy2<=0){ poly(left2, sideC, strokeC, lw); }
-  else { poly(right, sideC, strokeC, lw); }
-  poly(top, topC, strokeC, lw);
+
+  function faceVisible(pts){
+    var ax=pts[1][0]-pts[0][0], ay=pts[1][1]-pts[0][1];
+    var bx=pts[2][0]-pts[0][0], by=pts[2][1]-pts[0][1];
+    return (ax*by - ay*bx) < 0;
+  }
+
+  if(faceVisible(top)) poly(top, topC, strokeC, lw);
+  if(faceVisible(front)) poly(front, color, strokeC, lw);
+  if(faceVisible(back)) poly(back, shade(color,-15), strokeC, lw);
+  if(faceVisible(right)) poly(right, sideC, strokeC, lw);
+  if(faceVisible(left2)) poly(left2, sideC, strokeC, lw);
   ctx.globalAlpha=1;
   if(hov){
     const cp=proj(x+w/2,y+h,z+d/2);
