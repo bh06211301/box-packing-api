@@ -11,7 +11,7 @@ h1{font-size:18px;font-weight:600;margin-bottom:4px}
 .sub{font-size:13px;color:#888;margin-bottom:16px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .stat{background:#fff;border-radius:10px;padding:12px;text-align:center;border:0.5px solid #e0ded8}
-.stat-n{font-size:20px;font-weight:600;color:#222}
+.stat-n{font-size:18px;font-weight:600;color:#222}
 .stat-l{font-size:11px;color:#888;margin-top:3px}
 .badge{display:inline-block;font-size:12px;padding:3px 10px;border-radius:6px;font-weight:500;margin-bottom:16px}
 .badge-ok{background:#d4f0e4;color:#0a5c38}
@@ -21,7 +21,7 @@ h1{font-size:18px;font-weight:600;margin-bottom:4px}
 .view-btns{display:flex;gap:8px;margin-bottom:10px}
 .vbtn{flex:1;padding:7px 0;font-size:12px;border:0.5px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;color:#333}
 .vbtn.active{background:#222;color:#fff;border-color:#222}
-canvas{width:100%;border-radius:8px;border:0.5px solid #e0ded8;background:#fafaf8;display:block;touch-action:none}
+canvas{width:100%;border-radius:8px;border:0.5px solid #e0ded8;display:block;touch-action:none;background:#e8f4f8}
 .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .leg-item{display:flex;align-items:center;gap:5px;font-size:12px;color:#555}
 .leg-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0}
@@ -57,27 +57,24 @@ td:last-child{text-align:right}
   <div class="stat"><div class="stat-n">{{ r.utilization }}%</div><div class="stat-l">空間使用率</div></div>
 </div>
 
-<!-- 3D 視覺化 -->
 <div class="card">
   <div class="card-title">3D 裝箱圖</div>
   <div class="view-btns">
-    <button class="vbtn active" onclick="setView('iso')">斜視</button>
-    <button class="vbtn" onclick="setView('front')">正面</button>
-    <button class="vbtn" onclick="setView('top')">俯視</button>
-    <button class="vbtn" onclick="setView('side')">側面</button>
+    <button class="vbtn active" onclick="setView('iso',this)">斜視</button>
+    <button class="vbtn" onclick="setView('front',this)">正面</button>
+    <button class="vbtn" onclick="setView('top',this)">俯視</button>
+    <button class="vbtn" onclick="setView('side',this)">側面</button>
   </div>
-  <canvas id="c3d" height="300"></canvas>
-  <div id="hover-info">滑動可旋轉・點產品查看資訊</div>
+  <canvas id="c3d" height="320"></canvas>
+  <div id="hover-info">拖曳可旋轉・移到產品上查看名稱</div>
   <div class="legend" id="legend"></div>
 </div>
 
-<!-- 層排列文字版 -->
 <div class="card">
   <div class="card-title">層排列（打包時對照用）</div>
   <div id="layers-text"></div>
 </div>
 
-<!-- 產品方向表 -->
 <div class="card">
   <div class="card-title">各產品擺放方式</div>
   <table>
@@ -96,106 +93,169 @@ td:last-child{text-align:right}
 <div class="tip">箱子內徑：{{ bdims.w }}×{{ bdims.h }}×{{ bdims.d }} cm</div>
 
 <script>
-const packed = {{ r.packed | tojson }};
-const BOX = {{ session.box_dims | tojson }};
-const items = {{ session.products | tojson }};
+const packed = {{ r.packed | tojson | safe }};
+const BOX = {{ session.box_dims | tojson | safe }};
+const products = {{ session.products | tojson | safe }};
 
-// ── 3D 渲染 ──
 const canvas = document.getElementById('c3d');
 const ctx = canvas.getContext('2d');
 let W, H, CX, CY;
+
+let rotX = 0.5, rotY = -0.6;
+let dragging = false, lastX, lastY, hovIdx = -1;
+
 function resize(){
-  W = canvas.offsetWidth; H = 300;
+  W = canvas.offsetWidth;
+  H = 320;
   canvas.width = W * devicePixelRatio;
   canvas.height = H * devicePixelRatio;
   ctx.scale(devicePixelRatio, devicePixelRatio);
   draw();
 }
 
-let rotX = 0.38, rotY = -0.55;
-let dragging = false, lastX, lastY, hovIdx = -1;
-
 function proj(x, y, z){
   const cx = Math.cos(rotX), sx = Math.sin(rotX);
   const cy = Math.cos(rotY), sy = Math.sin(rotY);
-  const x1 = x*cy + z*sy;
-  const y1 = -x*sy*sx + y*cx - z*cy*sx;
-  const sc = Math.min(W, H) / Math.max(BOX.w, BOX.h, BOX.d) * 0.55;
-  return [CX + x1*sc, CY - y1*sc - H*0.07];
+  const x1 = x * cy + z * sy;
+  const y1 = -x * sy * sx + y * cx - z * cy * sx;
+  const sc = Math.min(W, H) / Math.max(BOX.w, BOX.h, BOX.d) * 0.52;
+  return [CX + x1 * sc, CY - y1 * sc - H * 0.05];
 }
 
-function face(pts, fill, stroke){
+function drawFloorAndWalls() {
+  const bw = BOX.w, bh = BOX.h, bd = BOX.d;
+  // 地板
+  const fl = [
+    proj(0,0,0), proj(bw,0,0), proj(bw,0,bd), proj(0,0,bd)
+  ];
   ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  fl.forEach((p,i)=> i===0 ? ctx.moveTo(p[0],p[1]) : ctx.lineTo(p[0],p[1]));
   ctx.closePath();
-  ctx.fillStyle = fill; ctx.fill();
-  ctx.strokeStyle = stroke; ctx.lineWidth = 0.6; ctx.stroke();
-}
+  ctx.fillStyle = '#d0e8c0';
+  ctx.fill();
+  ctx.strokeStyle = '#aac090'; ctx.lineWidth = 0.8; ctx.stroke();
 
-function lighten(c, a){ return c + Math.round(a).toString(16).padStart(2,'0'); }
+  // 格線（地板）
+  ctx.strokeStyle = '#b8d4a8'; ctx.lineWidth = 0.5;
+  for(let i=1; i<bw; i+=5){
+    const a = proj(i,0,0), b = proj(i,0,bd);
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+  }
+  for(let i=1; i<bd; i+=5){
+    const a = proj(0,0,i), b = proj(bw,0,i);
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+  }
 
-function drawCuboid(it, hov){
-  const {x, y, z, w, h, d, color} = it;
-  const bx = BOX.w/2, by = BOX.h/2, bz = BOX.d/2;
-  const p = (dx,dy,dz) => proj(x+dx-bx, -(y+dy)+by, z+dz-bz);
-  const tl=p(0,h,0),tr=p(w,h,0),br=p(w,0,0),bl=p(0,0,0);
-  const tl2=p(0,h,d),tr2=p(w,h,d),br2=p(w,0,d),bl2=p(0,0,d);
-  const cy2=Math.cos(rotY), sy2=Math.sin(rotY), cx2=Math.cos(rotX);
-  const dim = hov ? 'ff' : 'cc';
-  const c = color + dim;
-  const dark = color + (hov?'bb':'88');
-  const light_top = hov ? color+'dd' : color+'aa';
-  if(cx2>=0) face([tl2,tr2,tr,tl], light_top, color+'44');
-  if(cy2>=0) face([bl,tl,tr,br], c, color+'55');
-  else        face([bl2,tl2,tl,bl], dark, color+'44');
-  if(sy2<=0) face([br,tr,tr2,br2], dark, color+'44');
-  else        face([bl2,tl2,tl,bl], dark, color+'44');
-  if(cy2<0)  face([bl,tl,tr,br], c, color+'55');
-  if(cx2<0)  face([tl2,tr2,tr,tl], light_top, color+'44');
-  if(sy2>0)  face([br,tr,tr2,br2], dark, color+'44');
-}
+  // 左牆
+  const wl = [
+    proj(0,0,0), proj(0,bh,0), proj(0,bh,bd), proj(0,0,bd)
+  ];
+  ctx.beginPath();
+  wl.forEach((p,i)=> i===0 ? ctx.moveTo(p[0],p[1]) : ctx.lineTo(p[0],p[1]));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(180,200,220,0.35)';
+  ctx.fill();
+  ctx.strokeStyle = '#9ab0c0'; ctx.lineWidth = 0.8; ctx.stroke();
 
-function drawBoxWire(){
-  const bx=BOX.w/2, by=BOX.h/2, bz=BOX.d/2;
-  const corners=[
-    [0,0,0],[BOX.w,0,0],[BOX.w,BOX.h,0],[0,BOX.h,0],
-    [0,0,BOX.d],[BOX.w,0,BOX.d],[BOX.w,BOX.h,BOX.d],[0,BOX.h,BOX.d],
-  ].map(([x,y,z])=>proj(x-bx,-y+by,z-bz));
-  const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-  ctx.strokeStyle='rgba(100,100,90,0.2)'; ctx.lineWidth=0.8; ctx.setLineDash([4,3]);
-  edges.forEach(([a,b])=>{ctx.beginPath();ctx.moveTo(corners[a][0],corners[a][1]);ctx.lineTo(corners[b][0],corners[b][1]);ctx.stroke();});
+  // 後牆
+  const wb = [
+    proj(0,0,bd), proj(bw,0,bd), proj(bw,bh,bd), proj(0,bh,bd)
+  ];
+  ctx.beginPath();
+  wb.forEach((p,i)=> i===0 ? ctx.moveTo(p[0],p[1]) : ctx.lineTo(p[0],p[1]));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(180,200,220,0.25)';
+  ctx.fill();
+  ctx.strokeStyle = '#9ab0c0'; ctx.lineWidth = 0.8; ctx.stroke();
+
+  // 箱子邊框（虛線）
+  const edges = [
+    [proj(0,bh,0),proj(bw,bh,0)],[proj(bw,0,0),proj(bw,bh,0)],
+    [proj(bw,bh,0),proj(bw,bh,bd)],[proj(bw,0,0),proj(bw,0,bd)],
+    [proj(bw,bh,bd),proj(0,bh,bd)],[proj(bw,0,bd),proj(bw,bh,bd)],
+    [proj(0,bh,0),proj(0,bh,bd)],
+  ];
+  ctx.strokeStyle='rgba(80,100,120,0.3)'; ctx.lineWidth=0.8; ctx.setLineDash([4,3]);
+  edges.forEach(([a,b])=>{ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();});
   ctx.setLineDash([]);
 }
 
-function sortedPacked(){
+function hexToRgb(hex){
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+function shadeColor(hex, amt){
+  const [r,g,b] = hexToRgb(hex);
+  return `rgb(${Math.max(0,Math.min(255,r+amt))},${Math.max(0,Math.min(255,g+amt))},${Math.max(0,Math.min(255,b+amt))})`;
+}
+
+function drawBox3D(it, hov){
+  const {x,y,z,w,h,d,color,name} = it;
+  const bx=BOX.w/2, by=0, bz=BOX.d/2;
+  const ox = x-0, oy = y-0, oz = z-0;
+  const p = (dx,dy,dz) => proj(ox+dx, oy+dy, oz+dz);
+
+  const top = [p(0,h,0),p(w,h,0),p(w,h,d),p(0,h,d)];
+  const front = [p(0,0,0),p(w,0,0),p(w,h,0),p(0,h,0)];
+  const right = [p(w,0,0),p(w,0,d),p(w,h,d),p(w,h,0)];
+  const left = [p(0,0,0),p(0,0,d),p(0,h,d),p(0,h,0)];
+  const back = [p(0,0,d),p(w,0,d),p(w,h,d),p(0,h,d)];
+  const bot = [p(0,0,0),p(w,0,0),p(w,0,d),p(0,0,d)];
+
+  const alpha = hov ? 1.0 : 0.92;
+  const topCol = shadeColor(color, 40);
+  const frontCol = color;
+  const sideCol = shadeColor(color, -30);
+  const stroke = shadeColor(color, -60);
+
+  const drawFace = (pts, fill) => {
+    ctx.beginPath();
+    pts.forEach((p,i)=> i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]));
+    ctx.closePath();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = hov ? 1.5 : 0.8;
+    ctx.stroke();
+  };
+
+  const cy2 = Math.cos(rotY), sy2 = Math.sin(rotY), cx2 = Math.cos(rotX);
+  if(cx2 < 0) drawFace(bot, shadeColor(color,-50));
+  if(sy2 > 0) drawFace(left, sideCol);
+  else drawFace(right, sideCol);
+  if(cy2 > 0) drawFace(back, shadeColor(color,-20));
+  else drawFace(front, frontCol);
+  if(cy2 <= 0) drawFace(back, shadeColor(color,-20));
+  else drawFace(front, frontCol);
+  if(sy2 <= 0) drawFace(left, sideCol);
+  else drawFace(right, sideCol);
+  drawFace(top, topCol);
+
+  // 名稱標籤（hover時）
+  if(hov){
+    const cp = proj(x+w/2, y+h/2, z+d/2);
+    const tx = Math.min(cp[0]+8, W-150), ty = Math.max(cp[1]-48, 8);
+    ctx.fillStyle='rgba(255,255,255,0.95)';
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(tx,ty,145,42,6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#111'; ctx.font='500 12px sans-serif';
+    ctx.fillText(name, tx+9, ty+16);
+    ctx.fillStyle='#666'; ctx.font='11px sans-serif';
+    ctx.fillText(`${it.orientation}・第${it.layer}層・${w}×${h}×${d}cm`, tx+9, ty+32);
+  }
+}
+
+function sortedItems(){
   return packed.map((it,i)=>({...it,i})).sort((a,b)=>{
-    const dep=(p)=>{
+    const dep = p => {
       const cy=Math.cos(rotY),sy=Math.sin(rotY),sx=Math.sin(rotX);
-      return (p.x+p.w/2-BOX.w/2)*sy + (-(p.y+p.h/2)+BOX.h/2)*(-sx) + (p.z+p.d/2-BOX.d/2)*cy;
+      const cx2 = p.x+p.w/2, cy2 = p.y+p.h/2, cz2 = p.z+p.d/2;
+      return cx2*sy + cy2*(-sx) + cz2*cy;
     };
     return dep(a)-dep(b);
   });
-}
-
-function draw(){
-  CX = W/2; CY = H/2;
-  ctx.clearRect(0,0,W,H);
-  drawBoxWire();
-  sortedPacked().forEach(it=>drawCuboid(it, it.i===hovIdx));
-
-  if(hovIdx>=0){
-    const it=packed[hovIdx];
-    const cp=proj(it.x+it.w/2-BOX.w/2,-(it.y+it.h/2)+BOX.h/2,it.z+it.d/2-BOX.d/2);
-    const tx=Math.min(cp[0]+8, W-140), ty=Math.max(cp[1]-48,8);
-    ctx.fillStyle='rgba(255,255,255,0.93)';
-    ctx.strokeStyle=it.color; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.roundRect(tx,ty,132,40,6); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='#222'; ctx.font='500 12px sans-serif';
-    ctx.fillText(it.name, tx+9, ty+15);
-    ctx.fillStyle='#777'; ctx.font='11px sans-serif';
-    ctx.fillText(`${it.orientation}・第${it.layer}層・${it.w}×${it.h}×${it.d}`, tx+9, ty+30);
-  }
 }
 
 function getHov(mx,my){
@@ -205,7 +265,7 @@ function getHov(mx,my){
       [it.x,it.y,it.z+it.d],[it.x+it.w,it.y,it.z+it.d],[it.x+it.w,it.y+it.h,it.z+it.d],[it.x,it.y+it.h,it.z+it.d]];
     let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
     corners.forEach(([x,y,z])=>{
-      const [px,py]=proj(x-BOX.w/2,-y+BOX.h/2,z-BOX.d/2);
+      const [px,py]=proj(x,y,z);
       minX=Math.min(minX,px);maxX=Math.max(maxX,px);
       minY=Math.min(minY,py);maxY=Math.max(maxY,py);
     });
@@ -217,11 +277,27 @@ function getHov(mx,my){
   return best;
 }
 
+function draw(){
+  CX=W/2; CY=H/2;
+  ctx.clearRect(0,0,W,H);
+  // 天空背景
+  ctx.fillStyle='#e8f4f8';
+  ctx.fillRect(0,0,W,H);
+  drawFloorAndWalls();
+  sortedItems().forEach(it=>drawBox3D(it, it.i===hovIdx));
+}
+
 canvas.addEventListener('mousedown',e=>{dragging=true;lastX=e.offsetX;lastY=e.offsetY;});
 canvas.addEventListener('mousemove',e=>{
-  if(dragging){rotY+=(e.offsetX-lastX)*0.012;rotX+=(e.offsetY-lastY)*0.012;lastX=e.offsetX;lastY=e.offsetY;draw();}
-  else{const h=getHov(e.offsetX,e.offsetY);if(h!==hovIdx){hovIdx=h;draw();}
-    document.getElementById('hover-info').textContent=h>=0?`${packed[h].name}・${packed[h].orientation}・第${packed[h].layer}層`:'滑動可旋轉・點產品查看資訊';}
+  if(dragging){
+    rotY+=(e.offsetX-lastX)*0.012; rotX+=(e.offsetY-lastY)*0.012;
+    lastX=e.offsetX; lastY=e.offsetY; draw();
+  } else {
+    const h=getHov(e.offsetX,e.offsetY);
+    if(h!==hovIdx){hovIdx=h;draw();}
+    const info=document.getElementById('hover-info');
+    info.textContent=h>=0?`${packed[h].name}・${packed[h].orientation}・第${packed[h].layer}層`:'拖曳可旋轉・移到產品上查看名稱';
+  }
 });
 canvas.addEventListener('mouseup',()=>dragging=false);
 canvas.addEventListener('mouseleave',()=>{dragging=false;hovIdx=-1;draw();});
@@ -231,24 +307,24 @@ canvas.addEventListener('touchstart',e=>{const t=e.touches[0];t1x=t.clientX;t1y=
 canvas.addEventListener('touchmove',e=>{
   e.preventDefault();
   const t=e.touches[0];
-  rotY+=(t.clientX-t1x)*0.012;rotX+=(t.clientY-t1y)*0.012;
-  t1x=t.clientX;t1y=t.clientY;draw();
+  rotY+=(t.clientX-t1x)*0.012; rotX+=(t.clientY-t1y)*0.012;
+  t1x=t.clientX; t1y=t.clientY; draw();
 },{passive:false});
 canvas.addEventListener('touchend',()=>dragging=false);
 
-function setView(v){
+function setView(v, btn){
   document.querySelectorAll('.vbtn').forEach(b=>b.classList.remove('active'));
-  event.target.classList.add('active');
-  if(v==='iso'){rotX=0.38;rotY=-0.55;}
-  else if(v==='front'){rotX=0;rotY=0;}
-  else if(v==='top'){rotX=1.4;rotY=0;}
-  else if(v==='side'){rotX=0;rotY=-1.57;}
+  btn.classList.add('active');
+  if(v==='iso'){rotX=0.5;rotY=-0.6;}
+  else if(v==='front'){rotX=0.1;rotY=0;}
+  else if(v==='top'){rotX=1.45;rotY=0;}
+  else if(v==='side'){rotX=0.1;rotY=-1.57;}
   draw();
 }
 
-// ── 圖例 ──
-const legendEl = document.getElementById('legend');
-const seen = new Set();
+// 圖例
+const legendEl=document.getElementById('legend');
+const seen=new Set();
 packed.forEach(p=>{
   if(!seen.has(p.name)){
     seen.add(p.name);
@@ -258,24 +334,26 @@ packed.forEach(p=>{
   }
 });
 
-// ── 層排列文字版 ──
-const layersEl = document.getElementById('layers-text');
-const layerMap = {};
+// 層排列文字版
+const layersEl=document.getElementById('layers-text');
+const layerMap={};
 packed.forEach(p=>{
   if(!layerMap[p.layer]) layerMap[p.layer]=[];
   layerMap[p.layer].push(p);
 });
-Object.entries(layerMap).sort((a,b)=>a[0]-b[0]).forEach(([ln, ps])=>{
-  const label = ln==1?'第1層（底部）': ln==Object.keys(layerMap).length?`第${ln}層（頂部）`:`第${ln}層（中間）`;
+const totalLayers=Object.keys(layerMap).length;
+Object.entries(layerMap).sort((a,b)=>Number(a[0])-Number(b[0])).forEach(([ln,ps])=>{
+  const n=Number(ln);
+  const label = n===1?'第1層（底部）': n===totalLayers?`第${n}層（頂部）`:`第${n}層（中間）`;
   const div=document.createElement('div'); div.className='layer-section';
-  const chips = ps.map(p=>`<span class="chip" style="border-left-color:${p.color}">${p.name} ${p.orientation}</span>`).join('');
+  const chips=ps.map(p=>`<span class="chip" style="border-left-color:${p.color}">${p.name} ${p.orientation}</span>`).join('');
   div.innerHTML=`<div class="layer-label">${label}</div><div class="chips">${chips}</div>`;
   layersEl.appendChild(div);
 });
 
-// ── 產品方向表 ──
-const tbody = document.getElementById('prod-table');
-const prodMap = {};
+// 產品方向表
+const tbody=document.getElementById('prod-table');
+const prodMap={};
 packed.forEach(p=>{
   if(!prodMap[p.name]) prodMap[p.name]={name:p.name,color:p.color,orientations:new Set(),layers:new Set(),w:p.w,h:p.h,d:p.d};
   prodMap[p.name].orientations.add(p.orientation);
@@ -286,12 +364,12 @@ Object.values(prodMap).forEach(p=>{
   tr.innerHTML=`
     <td><span class="dot" style="background:${p.color}"></span>${p.name}</td>
     <td style="text-align:center">${[...p.orientations].join('/')}</td>
-    <td style="text-align:center">${[...p.layers].sort().join(', ')}</td>
+    <td style="text-align:center">${[...p.layers].sort((a,b)=>a-b).join(', ')}</td>
     <td>${p.w}×${p.h}×${p.d}</td>`;
   tbody.appendChild(tr);
 });
 
-window.addEventListener('resize', resize);
+window.addEventListener('resize',resize);
 resize();
 </script>
 </body>
