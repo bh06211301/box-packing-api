@@ -189,13 +189,13 @@ def do_pack(order_id, raw_items):
         chosen_box = box_name + "（仍有部分放不下）"
     session_id = str(uuid.uuid4())[:8]
     sessions[session_id] = {
-        "order_id": order_id,
-        "box": chosen_box,
-        "box_dims": BOXES.get(chosen_box.replace("（仍有部分放不下）", ""), BOXES["好市多牛奶箱"]),
-        "items": items,
-        "result": result,
-        "ts": time.time(),
-    }
+    "order_id": order_id,
+    "box": chosen_box,
+    "box_dims": BOXES.get(chosen_box.replace("（仍有部分放不下）", ""), BOXES["好市多牛奶箱"]),
+    "products": items,
+    "result": result,
+    "ts": time.time(),
+}
     now = time.time()
     expired = [k for k, v in sessions.items() if now - v["ts"] > 86400]
     for k in expired:
