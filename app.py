@@ -24,16 +24,16 @@ COLORS = [
 PRODUCTS_SHEET_ID = "1tyJYRWVPl7F5kprBylR_WbbIVayIWQEUxdQ-2sCL-cM"
 ORDERS_SHEET_ID = "13HB7e9mzL0H6Nhfyl-AKhjO8M_GElnqPldTk-u-0ni8"
 ORDERS_SHEET = "訂單明細"
-PRODUCTS_SHEET = "產品清單"
 product_cache = {}
 cache_time = 0
+
 
 def load_products():
     global product_cache, cache_time
     if time.time() - cache_time < 3600 and product_cache:
         return product_cache
     try:
-        url = f"https://docs.google.com/spreadsheets/d/{PRODUCTS_SHEET_ID}/gviz/tq?tqx=out:csv&gid=1553092401"
+        url = "https://docs.google.com/spreadsheets/d/" + PRODUCTS_SHEET_ID + "/gviz/tq?tqx=out:csv&gid=1553092401"
         response = urlopen(url)
         lines = response.read().decode("utf-8").splitlines()
         reader = csv.reader(lines)
@@ -48,38 +48,40 @@ def load_products():
                 w = float(row[12]) if row[12].strip() else 10
                 h = float(row[14]) if row[14].strip() else 10
                 d = float(row[13]) if row[13].strip() else 10
-            except:
+            except Exception:
                 w, h, d = 10, 10, 10
             products[pid] = {"name": name, "w": w, "h": h, "d": d}
         product_cache = products
         cache_time = time.time()
         return products
     except Exception as e:
-        print(f"載入產品清單失敗: {e}")
+        print("載入產品清單失敗: " + str(e))
         return {}
+
 
 def load_order_items(order_id):
     try:
-        url = f"https://docs.google.com/spreadsheets/d/{ORDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(ORDERS_SHEET)}"
+        url = "https://docs.google.com/spreadsheets/d/" + ORDERS_SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=" + quote(ORDERS_SHEET)
         response = urlopen(url)
         lines = response.read().decode("utf-8").splitlines()
         reader = csv.reader(lines)
         next(reader)
         items = []
         for row in reader:
-            if len(row) < 6:
+            if len(row) < 5:
                 continue
-           if str(row[1]).strip() == str(order_id).strip():
-            pid = row[3].strip()
-            try:
-                qty = int(float(row[4]))
-                except:
+            if str(row[1]).strip() == str(order_id).strip():
+                pid = row[3].strip()
+                try:
+                    qty = int(float(row[4]))
+                except Exception:
                     qty = 1
                 items.append({"product_id": pid, "qty": qty})
         return items
     except Exception as e:
-        print(f"載入訂單明細失敗: {e}")
+        print("載入訂單明細失敗: " + str(e))
         return []
+
 
 def try_pack(items, box):
     bw, bh, bd = box["w"], box["h"], box["d"]
@@ -146,14 +148,19 @@ def try_pack(items, box):
         layer_num += 1
         remaining = still_remaining
         if current_y > bh:
-            return {"success": False, "packed": packed, "layers": layer_num,
-                    "utilization": 0, "remaining": len(remaining)}
+            return {
+                "success": False, "packed": packed, "layers": layer_num,
+                "utilization": 0, "remaining": len(remaining)
+            }
     success = len(remaining) == 0
     total_vol = bw * bh * bd
     used_vol = sum(p["w"] * p["h"] * p["d"] for p in packed)
     utilization = round(used_vol / total_vol * 100)
-    return {"success": success, "packed": packed, "layers": layer_num,
-            "utilization": utilization, "remaining": len(remaining)}
+    return {
+        "success": success, "packed": packed, "layers": layer_num,
+        "utilization": utilization, "remaining": len(remaining)
+    }
+
 
 def do_pack(order_id, raw_items):
     products = load_products()
@@ -189,18 +196,19 @@ def do_pack(order_id, raw_items):
         chosen_box = box_name + "（仍有部分放不下）"
     session_id = str(uuid.uuid4())[:8]
     sessions[session_id] = {
-    "order_id": order_id,
-    "box": chosen_box,
-    "box_dims": BOXES.get(chosen_box.replace("（仍有部分放不下）", ""), BOXES["好市多牛奶箱"]),
-    "products": items,
-    "result": result,
-    "ts": time.time(),
-}
+        "order_id": order_id,
+        "box": chosen_box,
+        "box_dims": BOXES.get(chosen_box.replace("（仍有部分放不下）", ""), BOXES["好市多牛奶箱"]),
+        "products": items,
+        "result": result,
+        "ts": time.time(),
+    }
     now = time.time()
     expired = [k for k, v in sessions.items() if now - v["ts"] > 86400]
     for k in expired:
         del sessions[k]
     return session_id
+
 
 @app.route("/pack-redirect")
 def pack_redirect():
@@ -209,10 +217,11 @@ def pack_redirect():
         return "缺少 order_id", 400
     raw_items = load_order_items(order_id)
     if not raw_items:
-        return f"找不到訂單 {order_id} 的明細", 404
+        return "找不到訂單 " + str(order_id) + " 的明細", 404
     session_id = do_pack(order_id, raw_items)
     base_url = os.environ.get("BASE_URL", request.host_url.rstrip("/"))
-    return redirect(f"{base_url}/view/{session_id}")
+    return redirect(base_url + "/view/" + session_id)
+
 
 @app.route("/pack", methods=["POST"])
 def pack():
@@ -230,8 +239,9 @@ def pack():
         "layers": session["result"]["layers"],
         "utilization": session["result"].get("utilization", 0),
         "success": session["result"]["success"],
-        "view_url": f"{base_url}/view/{session_id}",
+        "view_url": base_url + "/view/" + session_id,
     })
+
 
 @app.route("/view/<session_id>")
 def view(session_id):
@@ -239,6 +249,7 @@ def view(session_id):
     if not session:
         return "<h2 style='font-family:sans-serif;padding:2rem'>找不到此裝箱結果，可能已過期（24小時）</h2>", 404
     return render_template("result.html", session=session, session_id=session_id)
+
 
 @app.route("/test-products")
 def test_products():
@@ -248,14 +259,19 @@ def test_products():
         return jsonify({"count": len(products), "sample": sample})
     else:
         return jsonify({"count": 0, "error": "讀取失敗"})
+
+
 @app.route("/test-orders")
 def test_orders():
     order_id = request.args.get("order_id", "")
     items = load_order_items(order_id)
     return jsonify({"order_id": order_id, "count": len(items), "items": items})
+
+
 @app.route("/")
 def index():
     return jsonify({"status": "ok", "message": "裝箱 API 運行中"})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
