@@ -33,9 +33,9 @@ canvas{width:100%;border-radius:8px;border:0.5px solid #e0ded8;display:block;tou
 table{width:100%;font-size:13px;border-collapse:collapse}
 td{padding:7px 4px;border-bottom:0.5px solid #f0eeea;color:#444;vertical-align:middle}
 td:first-child{color:#222;font-weight:500}
-td:last-child{text-align:right}
 .dot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
 #hover-info{font-size:12px;color:#888;text-align:center;height:18px;margin-top:6px}
+.qty-badge{background:#eef4ff;color:#1a56a0;font-weight:700;padding:2px 8px;border-radius:5px;font-size:13px}
 </style>
 </head>
 <body>
@@ -81,10 +81,10 @@ td:last-child{text-align:right}
     <thead>
       <tr>
         <td style="color:#888;font-weight:400">產品</td>
+        <td style="color:#888;font-weight:400;text-align:center">數量</td>
         <td style="color:#888;font-weight:400;text-align:center">方向</td>
         <td style="color:#888;font-weight:400;text-align:center">層</td>
-        <td style="color:#888;font-weight:400;text-align:center">數量</td>
-        <td style="color:#888;font-weight:400;text-align:right">尺寸(cm)</td>
+        <td style="color:#888;font-weight:400;text-align:right">尺寸cm</td>
       </tr>
     </thead>
     <tbody id="prod-table"></tbody>
@@ -140,20 +140,15 @@ function shade(hex, amt){
   const r=Math.max(0,Math.min(255,((n>>16)&255)+amt));
   const g=Math.max(0,Math.min(255,((n>>8)&255)+amt));
   const b=Math.max(0,Math.min(255,(n&255)+amt));
-  return `rgb(${r},${g},${b})`;
+  return 'rgb('+r+','+g+','+b+')';
 }
 
 function drawScene(){
   const bw=BOX.w, bh=BOX.h, bd=BOX.d;
-
-  // 天空背景
   ctx.fillStyle='#ddeef8';
   ctx.fillRect(0,0,W,H);
-
-  // 地板
   const floor=[proj(0,0,0),proj(bw,0,0),proj(bw,0,bd),proj(0,0,bd)];
   poly(floor,'#b8d4a0','#94b87a',1);
-  // 地板格線
   ctx.strokeStyle='#a0c488'; ctx.lineWidth=0.4;
   for(let i=2;i<bw;i+=4){
     const a=proj(i,0,0),b=proj(i,0,bd);
@@ -163,16 +158,10 @@ function drawScene(){
     const a=proj(0,0,i),b=proj(bw,0,i);
     ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
   }
-
-  // 左牆
   const wallL=[proj(0,0,0),proj(0,bh,0),proj(0,bh,bd),proj(0,0,bd)];
   poly(wallL,'rgba(200,220,240,0.5)','#90a8c0',0.8);
-
-  // 後牆
   const wallB=[proj(0,0,bd),proj(bw,0,bd),proj(bw,bh,bd),proj(0,bh,bd)];
   poly(wallB,'rgba(200,220,240,0.35)','#90a8c0',0.8);
-
-  // 箱子頂部輪廓（虛線）
   ctx.strokeStyle='rgba(80,100,120,0.3)';
   ctx.lineWidth=0.8;
   ctx.setLineDash([4,3]);
@@ -184,44 +173,36 @@ function drawScene(){
     [proj(0,bh,bd),proj(bw,bh,bd)],
     [proj(bw,0,0),proj(bw,0,bd)],
   ];
-  topEdges.forEach(([a,b])=>{
-    ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+  topEdges.forEach(function(e){
+    ctx.beginPath();ctx.moveTo(e[0][0],e[0][1]);ctx.lineTo(e[1][0],e[1][1]);ctx.stroke();
   });
   ctx.setLineDash([]);
 }
 
 function drawCuboid(it, hov){
-  const {x,y,z,w,h,d,color,name,orientation,layer}=it;
-  const p=(dx,dy,dz)=>proj(x+dx,y+dy,z+dz);
-
+  const x=it.x,y=it.y,z=it.z,w=it.w,h=it.h,d=it.d,color=it.color,name=it.name,orientation=it.orientation,layer=it.layer;
+  function p(dx,dy,dz){ return proj(x+dx,y+dy,z+dz); }
   const top=[p(0,h,0),p(w,h,0),p(w,h,d),p(0,h,d)];
   const front=[p(0,0,0),p(w,0,0),p(w,h,0),p(0,h,0)];
   const right=[p(w,0,0),p(w,0,d),p(w,h,d),p(w,h,0)];
   const left2=[p(0,0,0),p(0,0,d),p(0,h,d),p(0,h,0)];
   const back=[p(0,0,d),p(w,0,d),p(w,h,d),p(0,h,d)];
-
-  const a=hov?1:0.93;
-  ctx.globalAlpha=a;
-
+  ctx.globalAlpha=hov?1:0.93;
   const cy2=Math.cos(rotY),sy2=Math.sin(rotY);
   const topC=shade(color,45);
   const sideC=shade(color,-35);
   const strokeC=shade(color,-70);
   const lw=hov?1.5:0.7;
-
-  // 繪製各面（依視角決定哪面可見）
   poly(back, shade(color,-15), strokeC, lw);
-  if(sy2>0) poly(left2, sideC, strokeC, lw);
-  else poly(right, sideC, strokeC, lw);
-  if(cy2>0) poly(front, color, strokeC, lw);
-  else poly(back, shade(color,-15), strokeC, lw);
-  if(cy2<=0) poly(front, color, strokeC, lw);
-  if(sy2<=0) poly(left2, sideC, strokeC, lw);
-  else poly(right, sideC, strokeC, lw);
+  if(sy2>0){ poly(left2, sideC, strokeC, lw); }
+  else { poly(right, sideC, strokeC, lw); }
+  if(cy2>0){ poly(front, color, strokeC, lw); }
+  else { poly(back, shade(color,-15), strokeC, lw); }
+  if(cy2<=0){ poly(front, color, strokeC, lw); }
+  if(sy2<=0){ poly(left2, sideC, strokeC, lw); }
+  else { poly(right, sideC, strokeC, lw); }
   poly(top, topC, strokeC, lw);
-
   ctx.globalAlpha=1;
-
   if(hov){
     const cp=proj(x+w/2,y+h,z+d/2);
     const tx=Math.min(Math.max(cp[0]-70,5),W-155);
@@ -234,34 +215,34 @@ function drawCuboid(it, hov){
     ctx.fillStyle='#111'; ctx.font='500 12px sans-serif';
     ctx.fillText(name, tx+8, ty+17);
     ctx.fillStyle='#666'; ctx.font='11px sans-serif';
-    ctx.fillText(`${orientation}・第${layer}層・${w}×${h}×${d}cm`, tx+8, ty+33);
+    ctx.fillText(orientation+'・第'+layer+'層・'+w+'x'+h+'x'+d+'cm', tx+8, ty+33);
   }
 }
 
 function getSorted(){
-  return packed.map((it,i)=>({...it,i})).sort((a,b)=>{
-    const dep=p=>{
-      const sy=Math.sin(rotY),sx=Math.sin(rotX),cy=Math.cos(rotY);
+  return packed.map(function(it,i){ return Object.assign({},it,{i:i}); }).sort(function(a,b){
+    function dep(p){
+      var sy=Math.sin(rotY),sx=Math.sin(rotX),cy=Math.cos(rotY);
       return (p.x+p.w/2)*sy+(p.y+p.h/2)*(-sx)+(p.z+p.d/2)*cy;
-    };
+    }
     return dep(a)-dep(b);
   });
 }
 
 function getHov(mx,my){
-  let best=-1,bestD=-Infinity;
-  packed.forEach((it,i)=>{
-    const cs=[[it.x,it.y,it.z],[it.x+it.w,it.y,it.z],[it.x+it.w,it.y+it.h,it.z],[it.x,it.y+it.h,it.z],
+  var best=-1,bestD=-Infinity;
+  packed.forEach(function(it,i){
+    var cs=[[it.x,it.y,it.z],[it.x+it.w,it.y,it.z],[it.x+it.w,it.y+it.h,it.z],[it.x,it.y+it.h,it.z],
       [it.x,it.y,it.z+it.d],[it.x+it.w,it.y,it.z+it.d],[it.x+it.w,it.y+it.h,it.z+it.d],[it.x,it.y+it.h,it.z+it.d]];
-    let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
-    cs.forEach(([x,y,z])=>{
-      const [px,py]=proj(x,y,z);
-      mnX=Math.min(mnX,px);mxX=Math.max(mxX,px);
-      mnY=Math.min(mnY,py);mxY=Math.max(mxY,py);
+    var mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
+    cs.forEach(function(c){
+      var pp=proj(c[0],c[1],c[2]);
+      mnX=Math.min(mnX,pp[0]);mxX=Math.max(mxX,pp[0]);
+      mnY=Math.min(mnY,pp[1]);mxY=Math.max(mxY,pp[1]);
     });
     if(mx>=mnX&&mx<=mxX&&my>=mnY&&my<=mxY){
-      const d=it.x+it.y+it.z;
-      if(d>bestD){bestD=d;best=i;}
+      var dd=it.x+it.y+it.z;
+      if(dd>bestD){bestD=dd;best=i;}
     }
   });
   return best;
@@ -270,37 +251,37 @@ function getHov(mx,my){
 function draw(){
   ctx.clearRect(0,0,W,H);
   drawScene();
-  getSorted().forEach(it=>drawCuboid(it,it.i===hovIdx));
+  getSorted().forEach(function(it){ drawCuboid(it,it.i===hovIdx); });
 }
 
-canvas.addEventListener('mousedown',e=>{dragging=true;lastX=e.offsetX;lastY=e.offsetY;});
-canvas.addEventListener('mousemove',e=>{
+canvas.addEventListener('mousedown',function(e){dragging=true;lastX=e.offsetX;lastY=e.offsetY;});
+canvas.addEventListener('mousemove',function(e){
   if(dragging){
     rotY+=(e.offsetX-lastX)*0.012;
     rotX+=(e.offsetY-lastY)*0.012;
     lastX=e.offsetX;lastY=e.offsetY;draw();
   } else {
-    const h=getHov(e.offsetX,e.offsetY);
-    if(h!==hovIdx){hovIdx=h;draw();}
-    const info=document.getElementById('hover-info');
-    info.textContent=h>=0?`${packed[h].name}・${packed[h].orientation}・第${packed[h].layer}層`:'拖曳可旋轉・移到產品上查看名稱';
+    var hh=getHov(e.offsetX,e.offsetY);
+    if(hh!==hovIdx){hovIdx=hh;draw();}
+    var info=document.getElementById('hover-info');
+    info.textContent=hh>=0?packed[hh].name+'・'+packed[hh].orientation+'・第'+packed[hh].layer+'層':'拖曳可旋轉・移到產品上查看名稱';
   }
 });
-canvas.addEventListener('mouseup',()=>dragging=false);
-canvas.addEventListener('mouseleave',()=>{dragging=false;hovIdx=-1;draw();});
+canvas.addEventListener('mouseup',function(){dragging=false;});
+canvas.addEventListener('mouseleave',function(){dragging=false;hovIdx=-1;draw();});
 
-let t1x,t1y;
-canvas.addEventListener('touchstart',e=>{const t=e.touches[0];t1x=t.clientX;t1y=t.clientY;dragging=true;},{passive:true});
-canvas.addEventListener('touchmove',e=>{
+var t1x,t1y;
+canvas.addEventListener('touchstart',function(e){var t=e.touches[0];t1x=t.clientX;t1y=t.clientY;dragging=true;},{passive:true});
+canvas.addEventListener('touchmove',function(e){
   e.preventDefault();
-  const t=e.touches[0];
+  var t=e.touches[0];
   rotY+=(t.clientX-t1x)*0.012;rotX+=(t.clientY-t1y)*0.012;
   t1x=t.clientX;t1y=t.clientY;draw();
 },{passive:false});
-canvas.addEventListener('touchend',()=>dragging=false);
+canvas.addEventListener('touchend',function(){dragging=false;});
 
 function setView(v,btn){
-  document.querySelectorAll('.vbtn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.vbtn').forEach(function(b){b.classList.remove('active');});
   btn.classList.add('active');
   if(v==='iso'){rotX=0.42;rotY=-0.55;}
   else if(v==='front'){rotX=0.08;rotY=0;}
@@ -309,49 +290,51 @@ function setView(v,btn){
   draw();
 }
 
-// 圖例
-const legendEl=document.getElementById('legend');
-const seen=new Set();
-packed.forEach(p=>{
+var legendEl=document.getElementById('legend');
+var seen=new Set();
+packed.forEach(function(p){
   if(!seen.has(p.name)){
     seen.add(p.name);
-    const div=document.createElement('div');div.className='leg-item';
-    div.innerHTML=`<span class="leg-dot" style="background:${p.color}"></span>${p.name}`;
+    var div=document.createElement('div');div.className='leg-item';
+    div.innerHTML='<span class="leg-dot" style="background:'+p.color+'"></span>'+p.name;
     legendEl.appendChild(div);
   }
 });
 
-// 層排列
-const layersEl=document.getElementById('layers-text');
-const layerMap={};
-packed.forEach(p=>{if(!layerMap[p.layer])layerMap[p.layer]=[];layerMap[p.layer].push(p);});
-const totalLayers=Object.keys(layerMap).length;
-Object.entries(layerMap).sort((a,b)=>Number(a[0])-Number(b[0])).forEach(([ln,ps])=>{
-  const n=Number(ln);
-  const label=n===1?'第1層（底部）':n===totalLayers?`第${n}層（頂部）`:`第${n}層（中間）`;
-  const div=document.createElement('div');div.className='layer-section';
-  const chips=ps.map(p=>`<span class="chip" style="border-left-color:${p.color}">${p.name} ${p.orientation}</span>`).join('');
-  div.innerHTML=`<div class="layer-label">${label}</div><div class="chips">${chips}</div>`;
+var layersEl=document.getElementById('layers-text');
+var layerMap={};
+packed.forEach(function(p){if(!layerMap[p.layer])layerMap[p.layer]=[];layerMap[p.layer].push(p);});
+var totalLayers=Object.keys(layerMap).length;
+Object.entries(layerMap).sort(function(a,b){return Number(a[0])-Number(b[0]);}).forEach(function(entry){
+  var ln=entry[0],ps=entry[1];
+  var n=Number(ln);
+  var label=n===1?'第1層（底部）':n===totalLayers?'第'+n+'層（頂部）':'第'+n+'層（中間）';
+  var div=document.createElement('div');div.className='layer-section';
+  var chips=ps.map(function(p){return '<span class="chip" style="border-left-color:'+p.color+'">'+p.name+' '+p.orientation+'</span>';}).join('');
+  div.innerHTML='<div class="layer-label">'+label+'</div><div class="chips">'+chips+'</div>';
   layersEl.appendChild(div);
 });
 
-// 產品方向表
-const tbody=document.getElementById('prod-table');
-packed.forEach(p=>{
+var tbody=document.getElementById('prod-table');
+var prodMap={};
+packed.forEach(function(p){
   if(!prodMap[p.name])prodMap[p.name]={name:p.name,color:p.color,orientations:new Set(),layers:new Set(),w:p.w,h:p.h,d:p.d,count:0};
   prodMap[p.name].orientations.add(p.orientation);
   prodMap[p.name].layers.add(p.layer);
   prodMap[p.name].count++;
 });
-Object.values(prodMap).forEach(p=>{
-  const tr=document.createElement('tr');
-  tr.innerHTML=`<td><span class="dot" style="background:${p.color}"></span>${p.name}</td>
-    <td style="text-align:center">${[...p.orientations].join('/')}</td>
-    <td style="text-align:center">${[...p.layers].sort((a,b)=>a-b).join(', ')}</td>
-    <td style="text-align:center;font-weight:600;color:#222">×${p.count}</td>
-    <td>${p.w}×${p.h}×${p.d}</td>`;
+Object.values(prodMap).forEach(function(p){
+  var tr=document.createElement('tr');
+  var layerArr=[...p.layers].sort(function(a,b){return a-b;}).join(', ');
+  var oriArr=[...p.orientations].join('/');
+  tr.innerHTML='<td><span class="dot" style="background:'+p.color+'"></span>'+p.name+'</td>'
+    +'<td style="text-align:center"><span class="qty-badge">x'+p.count+'</span></td>'
+    +'<td style="text-align:center">'+oriArr+'</td>'
+    +'<td style="text-align:center">'+layerArr+'</td>'
+    +'<td style="text-align:right">'+p.w+'x'+p.h+'x'+p.d+'</td>';
   tbody.appendChild(tr);
 });
+
 window.addEventListener('resize',resize);
 resize();
 </script>
