@@ -33,7 +33,7 @@ def load_products():
     if time.time() - cache_time < 3600 and product_cache:
         return product_cache
     try:
-        url = f"https://docs.google.com/spreadsheets/d/{PRODUCTS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet={quote(PRODUCTS_SHEET)}"
+        url = f"https://docs.google.com/spreadsheets/d/{PRODUCTS_SHEET_ID}/gviz/tq?tqx=out:csv&gid=1553092401"
         response = urlopen(url)
         lines = response.read().decode("utf-8").splitlines()
         reader = csv.reader(lines)
