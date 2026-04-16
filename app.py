@@ -69,10 +69,10 @@ def load_order_items(order_id):
         for row in reader:
             if len(row) < 6:
                 continue
-            if str(row[1]).strip() == str(order_id).strip():
-                pid = row[4].strip()
-                try:
-                    qty = int(float(row[5]))
+           if str(row[1]).strip() == str(order_id).strip():
+            pid = row[3].strip()
+            try:
+                qty = int(float(row[4]))
                 except:
                     qty = 1
                 items.append({"product_id": pid, "qty": qty})
