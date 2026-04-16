@@ -240,6 +240,14 @@ def view(session_id):
         return "<h2 style='font-family:sans-serif;padding:2rem'>找不到此裝箱結果，可能已過期（24小時）</h2>", 404
     return render_template("result.html", session=session, session_id=session_id)
 
+@app.route("/test-products")
+def test_products():
+    products = load_products()
+    if products:
+        sample = dict(list(products.items())[:3])
+        return jsonify({"count": len(products), "sample": sample})
+    else:
+        return jsonify({"count": 0, "error": "讀取失敗"})
 @app.route("/")
 def index():
     return jsonify({"status": "ok", "message": "裝箱 API 運行中"})
